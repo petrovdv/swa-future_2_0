@@ -71,9 +71,9 @@ jobs:
           STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
         run: |
           terraform init \
-            -backend-config="endpoint=https://storage.yandexcloud.net" \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
             -backend-config="bucket=$STATE_BUCKET" \
-            -backend-config="key=dev/terraform.tfstate" \
+            -backend-config="key=${{ inputs.environment }}/terraform.tfstate" \
             -backend-config="region=ru-central1" \
             -backend-config="access_key=$S3_ACCESS_KEY" \
             -backend-config="secret_key=$S3_SECRET_KEY" \
@@ -82,7 +82,7 @@ jobs:
             -backend-config="skip_credentials_validation=true" \
             -backend-config="skip_metadata_api_check=true" \
             -backend-config="skip_s3_checksum=true" \
-            -backend-config="force_path_style=true"          
+            -backend-config="use_path_style=true"
 
       - name: Generate Plan
         run: terraform plan -var-file=envs/dev/dev.tfvars -detailed-exitcode -out=tfplan
@@ -122,9 +122,9 @@ jobs:
           STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
         run: |
           terraform init \
-            -backend-config="endpoint=https://storage.yandexcloud.net" \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
             -backend-config="bucket=$STATE_BUCKET" \
-            -backend-config="key=dev/terraform.tfstate" \
+            -backend-config="key=${{ inputs.environment }}/terraform.tfstate" \
             -backend-config="region=ru-central1" \
             -backend-config="access_key=$S3_ACCESS_KEY" \
             -backend-config="secret_key=$S3_SECRET_KEY" \
@@ -133,7 +133,7 @@ jobs:
             -backend-config="skip_credentials_validation=true" \
             -backend-config="skip_metadata_api_check=true" \
             -backend-config="skip_s3_checksum=true" \
-            -backend-config="force_path_style=true"
+            -backend-config="use_path_style=true"
 
       - name: Generate Plan
         run: terraform plan -var-file=envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars -detailed-exitcode -out=tfplan
