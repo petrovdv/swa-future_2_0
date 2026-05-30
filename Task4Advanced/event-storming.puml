@@ -1,0 +1,185 @@
+@startuml Event Storming
+left to right direction
+skinparam nodesep 30
+skinparam ranksep 40
+
+skinparam package {
+  BorderColor #888
+  BorderThickness 1.5
+  FontSize 13
+  FontStyle bold
+}
+skinparam card {
+  BorderThickness 1
+  FontSize 11
+  RoundCorner 8
+}
+skinparam ArrowColor #666
+skinparam ArrowThickness 1.2
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+
+' ──────────────────────────────
+' ДОМЕН: КЛИНИКИ
+' ──────────────────────────────
+package "Клиники" #E1F5EE {
+  card "Зарегистрировать\nпациента" as CMD_REG #DDEEFF
+  card "Patient" as AGG_PATIENT #EEEDFE
+  card "PatientRegistered" as EVT_PREG #FAC775
+  card "ConsentUpdated" as EVT_CONSENT #FAC775
+
+  card "Запланировать визит" as CMD_VISIT #DDEEFF
+  card "Visit" as AGG_VISIT #EEEDFE
+  card "VisitScheduled" as EVT_VSCHED #FAC775
+  card "VisitCompleted" as EVT_VCOMP #FAC775
+  card "VisitCancelled" as EVT_VCANC #FAC775
+}
+
+CMD_REG --> AGG_PATIENT
+AGG_PATIENT --> EVT_PREG
+AGG_PATIENT --> EVT_CONSENT
+
+CMD_VISIT --> AGG_VISIT
+AGG_VISIT --> EVT_VSCHED
+AGG_VISIT --> EVT_VCOMP
+AGG_VISIT --> EVT_VCANC
+
+' ──────────────────────────────
+' ДОМЕН: ФИНТЕХ
+' ──────────────────────────────
+package "Финтех" #FFF8E1 {
+  card "Открыть счёт" as CMD_ACC #DDEEFF
+  card "BankAccount" as AGG_ACC #EEEDFE
+  card "AccountOpened" as EVT_ACCOPEN #FAC775
+  card "FundsDeposited" as EVT_DEP #FAC775
+  card "FundsWithdrawn" as EVT_WITH #FAC775
+
+  card "Подать заявку\nна кредит" as CMD_CREDIT #DDEEFF
+  card "CreditContract" as AGG_CREDIT #EEEDFE
+  card "CreditApplicationSubmitted" as EVT_CAPP #FAC775
+  card "CreditScoreCalculated" as EVT_CSCORE #FAC775
+  card "CreditContractCreated" as EVT_CCREATED #FAC775
+
+  card "Провести платёж" as CMD_PAY #DDEEFF
+  card "Payment" as AGG_PAY #EEEDFE
+  card "PaymentInitiated" as EVT_PINIT #FAC775
+  card "PaymentCompleted" as EVT_PCOMP #FAC775
+  card "PaymentFailed" as EVT_PFAIL #FAC775
+}
+
+CMD_ACC --> AGG_ACC
+AGG_ACC --> EVT_ACCOPEN
+AGG_ACC --> EVT_DEP
+AGG_ACC --> EVT_WITH
+
+CMD_CREDIT --> AGG_CREDIT
+AGG_CREDIT --> EVT_CAPP
+AGG_CREDIT --> EVT_CSCORE
+AGG_CREDIT --> EVT_CCREATED
+
+CMD_PAY --> AGG_PAY
+AGG_PAY --> EVT_PINIT
+AGG_PAY --> EVT_PCOMP
+AGG_PAY --> EVT_PFAIL
+
+' ──────────────────────────────
+' ДОМЕН: ИИ-СЕРВИСЫ
+' ──────────────────────────────
+package "ИИ-сервисы" #F3E5F5 {
+  card "Создать задачу\nдиагностики" as CMD_DIAG #DDEEFF
+  card "DiagnosticTask" as AGG_DIAG #EEEDFE
+  card "DiagnosticTaskCreated" as EVT_DTCREATED #FAC775
+  card "DiagnosticCompleted" as EVT_DTCOMP #FAC775
+  card "DiagnosticFailed" as EVT_DTFAIL #FAC775
+
+  card "Задеплоить модель" as CMD_MODEL #DDEEFF
+  card "MLModel" as AGG_MODEL #EEEDFE
+  card "ModelDeployed" as EVT_MDEP #FAC775
+  card "ModelDeprecated" as EVT_MDEPR #FAC775
+}
+
+CMD_DIAG --> AGG_DIAG
+AGG_DIAG --> EVT_DTCREATED
+AGG_DIAG --> EVT_DTCOMP
+AGG_DIAG --> EVT_DTFAIL
+
+CMD_MODEL --> AGG_MODEL
+AGG_MODEL --> EVT_MDEP
+AGG_MODEL --> EVT_MDEPR
+
+' ──────────────────────────────
+' ДОМЕН: ПАРТНЁРЫ
+' ──────────────────────────────
+package "Партнёры" #FBE9E7 {
+  card "Разместить заказ\nпоставки" as CMD_SUPPLY #DDEEFF
+  card "SupplyOrder" as AGG_SUPPLY #EEEDFE
+  card "SupplyOrderPlaced" as EVT_SORD #FAC775
+  card "SupplyDelivered" as EVT_SDEL #FAC775
+
+  card "Получить событие\nпартнёра" as CMD_PARTNER #DDEEFF
+  card "PartnerContract\n[ACL]" as AGG_PARTNER #EEEDFE
+  card "PartnerEventReceived" as EVT_PARTNER #FAC775
+}
+
+CMD_SUPPLY --> AGG_SUPPLY
+AGG_SUPPLY --> EVT_SORD
+AGG_SUPPLY --> EVT_SDEL
+
+CMD_PARTNER --> AGG_PARTNER
+AGG_PARTNER --> EVT_PARTNER
+
+' ──────────────────────────────
+' EVENT BUS
+' ──────────────────────────────
+component "Event Bus\n(Kafka / Pulsar)" as BUS #F5F5F5
+
+EVT_PREG --> BUS
+EVT_CONSENT --> BUS
+EVT_VSCHED --> BUS
+EVT_VCOMP --> BUS
+EVT_VCANC --> BUS
+
+EVT_ACCOPEN --> BUS
+EVT_CAPP --> BUS
+EVT_CSCORE --> BUS
+EVT_CCREATED --> BUS
+EVT_PINIT --> BUS
+EVT_PCOMP --> BUS
+EVT_PFAIL --> BUS
+
+EVT_DTCREATED --> BUS
+EVT_DTCOMP --> BUS
+EVT_DTFAIL --> BUS
+EVT_MDEP --> BUS
+
+EVT_SORD --> BUS
+EVT_SDEL --> BUS
+EVT_PARTNER --> BUS
+
+' ──────────────────────────────
+' ДОМЕН: ВИТРИНА ДАННЫХ
+' ──────────────────────────────
+package "Витрина данных" #E8F5E9 {
+  card "Подписка на события\n(фильтр без PHI)" as POL_READ #DDFFDD
+  card "AnalyticalModel" as AGG_ANAL #EEEDFE
+  card "DataCatalog\n[RBAC/ABAC]" as AGG_CAT #EEEDFE
+  card "ReportGenerated" as EVT_REPORT #FAC775
+  card "DatasetRefreshed" as EVT_DATASET #FAC775
+}
+
+BUS --> POL_READ : подписка\n(без PHI)
+POL_READ --> AGG_ANAL
+POL_READ --> AGG_CAT
+AGG_ANAL --> EVT_REPORT
+AGG_ANAL --> EVT_DATASET
+
+' ──────────────────────────────
+' CROSS-DOMAIN РЕАКЦИИ
+' ──────────────────────────────
+EVT_PREG ..> CMD_ACC : открыть счёт\nдля пациента
+EVT_VCOMP ..> CMD_DIAG : создать задачу\nдиагностики
+EVT_DTCOMP ..> AGG_VISIT : обновить статус\nвизита
+EVT_CCREATED ..> AGG_VISIT : рассрочка\nна лечение
+EVT_MDEP ..> AGG_DIAG : использовать\nновую модель
+
+@enduml
