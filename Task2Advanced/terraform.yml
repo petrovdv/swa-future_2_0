@@ -1,0 +1,214 @@
+name: Terraform CI/CD
+
+on:
+  pull_request:
+    branches: ['**']
+    paths:
+      - 'Task1Advanced/**.tf'
+      - 'Task1Advanced/**.tfvars'
+      - '.github/workflows/**'
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Действие'
+        required: true
+        type: choice
+        options: [deploy, destroy]
+        default: deploy
+      environment:
+        description: 'Окружение (dev, stage, prod)'
+        required: true
+        type: choice
+        options: [dev, stage, prod]
+        default: dev
+      branch:
+        description: 'Ветка для запуска'
+        required: true
+        type: string
+        default: main
+      confirm_destroy:
+        description: 'Для destroy: введите имя окружения для подтверждения (например, dev)'
+        required: false
+        type: string
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TF_COLOR: false
+
+jobs:
+  terraform-plan:
+    name: Plan (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: pr-${{ github.ref }}
+    defaults:
+      run:
+        working-directory: Task1Advanced
+    env:
+      TF_VAR_sa_key_file: ./sa-iam-key.json
+      TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+      TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Write SA Key
+        run: |
+          cat > sa-iam-key.json << 'EOF'
+          ${{ secrets.SA_KEY_JSON }}
+          EOF
+          chmod 600 sa-iam-key.json
+
+      - name: Set backend key
+        id: backend
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "key=${{ inputs.environment }}/terraform.tfstate" >> $GITHUB_OUTPUT
+          else
+            echo "key=pr-${{ github.event.pull_request.number }}/terraform.tfstate" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Init Remote Backend
+        env:
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+        run: |
+          terraform init \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=${{ steps.backend.outputs.key }}" \
+            -backend-config="region=ru-central1" \
+            -backend-config="access_key=$S3_ACCESS_KEY" \
+            -backend-config="secret_key=$S3_SECRET_KEY" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_s3_checksum=true" \
+            -backend-config="use_path_style=true"
+
+      - name: Generate Plan
+        run: terraform plan -var-file=envs/dev/dev.tfvars -detailed-exitcode -out=tfplan
+
+  terraform-deploy:
+    name: Deploy (${{ inputs.environment }})
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency: ${{ inputs.environment }}-deploy
+    defaults:
+      run:
+        working-directory: Task1Advanced
+    env:
+      TF_VAR_sa_key_file: ./sa-iam-key.json
+      TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+      TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Write SA Key
+        run: |
+          cat > sa-iam-key.json << 'EOF'
+          ${{ secrets.SA_KEY_JSON }}
+          EOF
+          chmod 600 sa-iam-key.json
+
+      - name: Init Remote Backend
+        env:
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+        run: |
+          terraform init \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=${{ inputs.environment }}/terraform.tfstate" \
+            -backend-config="region=ru-central1" \
+            -backend-config="access_key=$S3_ACCESS_KEY" \
+            -backend-config="secret_key=$S3_SECRET_KEY" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_s3_checksum=true" \
+            -backend-config="use_path_style=true"
+
+      - name: Generate Plan
+        run: terraform plan -var-file=envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars -detailed-exitcode -out=tfplan
+
+      - name: Apply Changes
+        run: terraform apply -auto-approve tfplan
+
+  terraform-destroy:
+    name: Destroy (${{ inputs.environment }})
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    concurrency: ${{ github.event.inputs.environment }}-destroy
+    defaults:
+      run:
+        working-directory: Task1Advanced
+    env:
+      TF_VAR_sa_key_file: ./sa-iam-key.json
+      TF_VAR_yc_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+      TF_VAR_yc_folder_id: ${{ secrets.YC_FOLDER_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Write SA Key
+        run: |
+          cat > sa-iam-key.json << 'EOF'
+          ${{ secrets.SA_KEY_JSON }}
+          EOF
+          chmod 600 sa-iam-key.json
+
+      - name: Init Remote Backend
+        env:
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          STATE_BUCKET:  ${{ secrets.STATE_BUCKET }}
+        run: |
+          terraform init \
+            -backend-config="endpoint=https://storage.yandexcloud.net" \
+            -backend-config="bucket=$STATE_BUCKET" \
+            -backend-config="key=${{ github.event.inputs.environment }}/terraform.tfstate" \
+            -backend-config="region=ru-central1" \
+            -backend-config="access_key=$S3_ACCESS_KEY" \
+            -backend-config="secret_key=$S3_SECRET_KEY" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_s3_checksum=true" \
+            -backend-config="force_path_style=true"
+
+      - name: Validate Confirmation
+        run: |
+          EXPECTED="${{ inputs.environment }}"
+          PROVIDED="${{ inputs.confirm_destroy }}"
+          if [ "$EXPECTED" != "$PROVIDED" ]; then
+            echo "::error:: Confirmation failed. Expected '$EXPECTED', got '$PROVIDED'."
+            exit 1
+          fi
+          echo "Confirmation passed: destroying $EXPECTED"
+
+      - name: Destroy Plan
+        run: terraform plan -destroy -var-file=envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars -detailed-exitcode -out=tfplan
+
+      - name: Execute Destroy
+        run: terraform destroy -var-file=envs/${{ inputs.environment }}/${{ inputs.environment }}.tfvars -auto-approve
